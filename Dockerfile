@@ -8,6 +8,6 @@ RUN adduser --disabled-password --gecos "" sentry
 
 RUN pip install -U sentry[postgres]
 
-USER app
+USER sentry
 WORKDIR /srv
 EXPOSE 9000
