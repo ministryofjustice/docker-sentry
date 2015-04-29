@@ -25,6 +25,7 @@ SENTRY_USE_BIG_INTS = True
 
 SENTRY_FEATURES['auth:register'] = False
 SENTRY_ALLOW_PUBLIC_PROJECTS = False
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 #############
 ## General ##
