@@ -23,6 +23,9 @@ DATABASES = {
 # unless you have altered all schemas first
 SENTRY_USE_BIG_INTS = True
 
+SENTRY_FEATURES['auth:register'] = False
+SENTRY_ALLOW_PUBLIC_PROJECTS = False
+
 #############
 ## General ##
 #############

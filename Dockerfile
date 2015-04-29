@@ -12,7 +12,10 @@ RUN mkdir -p /srv/redis /srv/log
 
 ADD . /srv
 RUN chown -R sentry: /srv
+RUN chmod 755 /srv/run.sh
 
 USER sentry
 WORKDIR /srv
 EXPOSE 9000
+
+ENTRYPOINT ["/srv/run.sh"]

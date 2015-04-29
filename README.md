@@ -4,7 +4,7 @@ Install for the first time, this will setup the DB and enable you to create the 
 
 WARNING: Only run this once on new environments
 ```
-sentry --config=/home/sentry/sentry.conf.py upgrade
-sentry --config=/home/sentry/sentry.conf.py createuser
+/usr/local/bin/sentry --config=/srv/sentry.conf.py upgrade
+/usr/local/bin/sentry --config=/srv/sentry.conf.py createuser
 
 ```
