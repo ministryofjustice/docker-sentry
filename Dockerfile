@@ -6,6 +6,11 @@ RUN apt-get update && apt-get install -y python-pip python-dev postgresql-client
 
 RUN adduser --disabled-password --gecos "" sentry
 
+# Install latest python
+ADD ./docker/install_python.sh /install_python.sh
+RUN chmod 755 /install_python.sh
+RUN /install_python.sh
+
 RUN pip install -U sentry[postgres]
 RUN pip install sentry-hipchat
 
