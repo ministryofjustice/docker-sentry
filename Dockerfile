@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y python-pip python-dev postgresql-client
 RUN adduser --disabled-password --gecos "" sentry
 
 RUN pip install -U sentry[postgres]
+RUN pip install sentry-hipchat
 
 RUN mkdir -p /srv/redis /srv/log
 
