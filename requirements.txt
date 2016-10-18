@@ -1,0 +1,2 @@
+sentry[postgres]==7.5.4
+sentry-hipchat==0.6.0
