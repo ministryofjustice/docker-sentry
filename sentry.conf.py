@@ -45,8 +45,8 @@ SENTRY_ADMIN_EMAIL = os.environ.get('SENTRY_ADMIN_EMAIL')
 SENTRY_REDIS_OPTIONS = {
     'hosts': {
         0: {
-            'host': '127.0.0.1',
-            'port': 6379,
+            'host': os.environ.get('REDIS_HOST'),
+            'port': os.environ.get('REDIS_PORT')
         }
     }
 }
@@ -62,7 +62,7 @@ SENTRY_CACHE = 'sentry.cache.redis.RedisCache'
 ###########
 
 CELERY_ALWAYS_EAGER = False
-BROKER_URL = 'redis://localhost:6379'
+BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379')
 
 #################
 ## Rate Limits ##
@@ -162,4 +162,4 @@ BITBUCKET_CONSUMER_KEY = ''
 BITBUCKET_CONSUMER_SECRET = ''
 
 # Django ALLOWED_HOSTS
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
+ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
