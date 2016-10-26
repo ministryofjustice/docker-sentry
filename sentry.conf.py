@@ -1,21 +1,22 @@
-# This file is just Python, with a touch of Django which means you
+# This file is just Python, with a touch of Django which means
 # you can inherit and tweak settings to your hearts content.
 from sentry.conf.server import *
 
 import os.path
-import os
 
 CONF_ROOT = os.path.dirname(__file__)
+env = os.environ.get
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-
+        'ENGINE': 'sentry.db.postgres',
         'NAME': os.environ.get('DB_USERNAME'),
         'USER': os.environ.get('DB_USERNAME'),
         'PASSWORD': os.environ.get('DB_PASSWORD'),
         'HOST': os.environ.get('DB_HOST'),
         'PORT': os.environ.get('DB_PORT'),
+        'AUTOCOMMIT': True,
+        'ATOMIC_REQUESTS': False,
     }
 }
 
@@ -23,143 +24,182 @@ DATABASES = {
 # unless you have altered all schemas first
 SENTRY_USE_BIG_INTS = True
 
-SENTRY_FEATURES['auth:register'] = False
-SENTRY_ALLOW_PUBLIC_PROJECTS = False
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-#############
-## General ##
-#############
-
-# The administrative email for this installation.
-# Note: This will be reported back to getsentry.com as the point of contact. See
-# the beacon documentation for more information.
-
-# SENTRY_ADMIN_EMAIL = 'your.name@example.com'
-SENTRY_ADMIN_EMAIL = os.environ.get('SENTRY_ADMIN_EMAIL')
+# If you're expecting any kind of real traffic on Sentry, we highly recommend
+# configuring the CACHES and Redis settings
 
 ###########
-## Redis ##
+# General #
 ###########
 
-SENTRY_REDIS_OPTIONS = {
-    'hosts': {
-        0: {
-            'host': os.environ.get('REDIS_HOST'),
-            'port': os.environ.get('REDIS_PORT')
-        }
-    }
-}
+# Instruct Sentry that this install intends to be run by a single organization
+# and thus various UI optimizations should be enabled.
+SENTRY_SINGLE_ORGANIZATION = True
+DEBUG = False
 
-###########
-## Cache ##
-###########
+#########
+# Redis #
+#########
 
+# Generic Redis configuration used as defaults for various things including:
+# Buffers, Quotas, TSDB
+
+redis = env('REDIS_HOST')
+redis_password = env('REDIS_PASSWORD') or ''
+redis_port = env('REDIS_PORT') or '6379'
+redis_db = env('REDIS_DB') or '0'
+
+SENTRY_OPTIONS.update({
+    'redis.clusters': {
+        'default': {
+            'hosts': {
+                0: {
+                    'host': redis,
+                    'password': redis_password,
+                    'port': redis_port,
+                    'db': redis_db,
+                },
+            },
+        },
+    },
+})
+
+
+#########
+# Cache #
+#########
+
+# Sentry currently utilizes two separate mechanisms. While CACHES is not a
+# requirement, it will optimize several high throughput patterns.
+
+# If you wish to use memcached, install the dependencies and adjust the config
+# as shown:
+#
+#   pip install python-memcached
+#
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+#         'LOCATION': ['127.0.0.1:11211'],
+#     }
+# }
+
+# A primary cache is required for things such as processing events
 SENTRY_CACHE = 'sentry.cache.redis.RedisCache'
 
-###########
-## Queue ##
-###########
+#########
+# Queue #
+#########
 
-CELERY_ALWAYS_EAGER = False
+# See https://docs.sentry.io/on-premise/server/queue/ for more
+# information on configuring your queue broker and workers. Sentry relies
+# on a Python framework called Celery to manage queues.
+
 BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379')
 
-#################
-## Rate Limits ##
-#################
+###############
+# Rate Limits #
+###############
+
+# Rate limits apply to notification handlers and are enforced per-project
+# automatically.
 
 SENTRY_RATELIMITER = 'sentry.ratelimits.redis.RedisRateLimiter'
 
-####################
-## Update Buffers ##
-####################
+##################
+# Update Buffers #
+##################
+
+# Buffers (combined with queueing) act as an intermediate layer between the
+# database and the storage API. They will greatly improve efficiency on large
+# numbers of the same events being sent to the API in a short amount of time.
+# (read: if you send any kind of real data to Sentry, you should enable buffers)
 
 SENTRY_BUFFER = 'sentry.buffer.redis.RedisBuffer'
 
-############
-## Quotas ##
-############
+##########
+# Quotas #
+##########
+
+# Quotas allow you to rate limit individual projects or the Sentry install as
+# a whole.
 
 SENTRY_QUOTAS = 'sentry.quotas.redis.RedisQuota'
 
-##########
-## TSDB ##
-##########
+########
+# TSDB #
+########
+
+# The TSDB is used for building charts as well as making things like per-rate
+# alerts possible.
 
 SENTRY_TSDB = 'sentry.tsdb.redis.RedisTSDB'
 
-##################
-## File storage ##
-##################
+###########
+# Digests #
+###########
+
+# The digest backend powers notification summaries.
+
+SENTRY_DIGESTS = 'sentry.digests.backends.redis.RedisBackend'
+
+################
+# File storage #
+################
+
+# Any Django storage backend is compatible with Sentry. For more solutions see
+# the django-storages package: https://django-storages.readthedocs.io/en/latest/
 
 SENTRY_FILESTORE = 'django.core.files.storage.FileSystemStorage'
 SENTRY_FILESTORE_OPTIONS = {
     'location': '/tmp/sentry-files',
 }
 
-################
-## Web Server ##
-################
+##############
+# Web Server #
+##############
 
-# You MUST configure the absolute URI root for Sentry:
-SENTRY_URL_PREFIX = os.environ.get('SENTRY_URL_PREFIX')  # No trailing slash!
-
-# If you're using a reverse proxy, you should enable the X-Forwarded-Proto
+# If you're using a reverse SSL proxy, you should enable the X-Forwarded-Proto
 # header and uncomment the following settings
-# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# SESSION_COOKIE_SECURE = True
+# CSRF_COOKIE_SECURE = True
+
+# If you're not hosting at the root of your web server,
+# you need to uncomment and set it to the path where Sentry is hosted.
+# FORCE_SCRIPT_NAME = '/sentry'
 
 SENTRY_WEB_HOST = '0.0.0.0'
 SENTRY_WEB_PORT = 9000
-SENTRY_WEB_OPTIONS = {'workers': 3}
+SENTRY_WEB_OPTIONS = {
+    # 'workers': 3,  # the number of web workers
+    # 'protocol': 'uwsgi',  # Enable uwsgi protocol instead of http
+}
 
-#################
-## Mail Server ##
-#################
+###############
+# Mail Server #
+###############
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
-EMAIL_HOST = os.environ.get('EMAIL_HOST')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
-EMAIL_PORT = os.environ.get('EMAIL_PORT')
-EMAIL_USE_TLS = False
+email = env('EMAIL_HOST')
+if email:
+    SENTRY_OPTIONS['mail.backend'] = 'smtp'
+    SENTRY_OPTIONS['mail.host'] = email
+    SENTRY_OPTIONS['mail.password'] = env('EMAIL_HOST_PASSWORD') or ''
+    SENTRY_OPTIONS['mail.username'] = env('EMAIL_HOST_USER') or ''
+    SENTRY_OPTIONS['mail.port'] = int(env('EMAIL_PORT'))
+    SENTRY_OPTIONS['mail.use-tls'] = TRUE
+    # The email address to send on behalf of
+    SENTRY_OPTIONS['mail.from'] = env('SERVER_EMAIL')
+else:
+    SENTRY_OPTIONS['mail.backend'] = 'dummy'
 
-# The email address to send on behalf of
-SERVER_EMAIL = os.environ.get('SERVER_EMAIL')
 
-###########
-## etc. ##
-###########
+# If this value ever becomes compromised, it's important to regenerate your
+# SENTRY_SECRET_KEY. Changing this value will result in all current sessions
+# being invalidated.
+SENTRY_OPTIONS['system.secret-key'] = env('SECRET_KEY')
+if not secret_key:
+    raise Exception('Error: SENTRY_SECRET_KEY is undefined, run `generate-secret-key` and set to -e SENTRY_SECRET_KEY')
 
-# If this file ever becomes compromised, it's important to regenerate your SECRET_KEY
-# Changing this value will result in all current sessions being invalidated
-#SECRET_KEY = '+MPHceMRaM1WHdj3RmfklqoYfWElt0wZX8ZJSi9QBy3W8gPc7GVHeg=='
-SECRET_KEY = os.environ.get('SECRET_KEY')
 
-# http://twitter.com/apps/new
-# It's important that input a callback URL, even if its useless. We have no idea why, consult Twitter.
-TWITTER_CONSUMER_KEY = ''
-TWITTER_CONSUMER_SECRET = ''
 
-# http://developers.facebook.com/setup/
-FACEBOOK_APP_ID = ''
-FACEBOOK_API_SECRET = ''
-
-# http://code.google.com/apis/accounts/docs/OAuth2.html#Registering
-GOOGLE_OAUTH2_CLIENT_ID = ''
-GOOGLE_OAUTH2_CLIENT_SECRET = ''
-
-# https://github.com/settings/applications/new
-GITHUB_APP_ID = ''
-GITHUB_API_SECRET = ''
-
-# https://trello.com/1/appKey/generate
-TRELLO_API_KEY = ''
-TRELLO_API_SECRET = ''
-
-# https://confluence.atlassian.com/display/BITBUCKET/OAuth+Consumers
-BITBUCKET_CONSUMER_KEY = ''
-BITBUCKET_CONSUMER_SECRET = ''
-
-# Django ALLOWED_HOSTS
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '*').split(',')
