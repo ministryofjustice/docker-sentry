@@ -187,7 +187,7 @@ if email:
     SENTRY_OPTIONS['mail.password'] = env('EMAIL_HOST_PASSWORD') or ''
     SENTRY_OPTIONS['mail.username'] = env('EMAIL_HOST_USER') or ''
     SENTRY_OPTIONS['mail.port'] = int(env('EMAIL_PORT'))
-    SENTRY_OPTIONS['mail.use-tls'] = TRUE
+    SENTRY_OPTIONS['mail.use-tls'] = True
     # The email address to send on behalf of
     SENTRY_OPTIONS['mail.from'] = env('SERVER_EMAIL')
 else:
@@ -198,8 +198,3 @@ else:
 # SENTRY_SECRET_KEY. Changing this value will result in all current sessions
 # being invalidated.
 SENTRY_OPTIONS['system.secret-key'] = env('SECRET_KEY')
-if not secret_key:
-    raise Exception('Error: SENTRY_SECRET_KEY is undefined, run `generate-secret-key` and set to -e SENTRY_SECRET_KEY')
-
-
-
