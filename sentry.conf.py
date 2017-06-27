@@ -35,6 +35,7 @@ SENTRY_USE_BIG_INTS = True
 # and thus various UI optimizations should be enabled.
 SENTRY_SINGLE_ORGANIZATION = True
 DEBUG = False
+SENTRY_ALLOW_REGISTRATION = False
 
 #########
 # Redis #
