@@ -176,6 +176,9 @@ SENTRY_WEB_OPTIONS = {
     # 'protocol': 'uwsgi',  # Enable uwsgi protocol instead of http
 }
 
+# GRAVATAR URL
+SENTRY_GRAVATAR_BASE_URL = 'https://secure.gravatar.com'
+
 ###############
 # Mail Server #
 ###############
