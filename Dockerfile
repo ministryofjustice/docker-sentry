@@ -8,7 +8,7 @@ RUN adduser --disabled-password --gecos "" sentry
 
 # Install latest python
 
-RUN pip install -r requirements.txt
+RUN pip install --upgrade -r requirements.txt
 ADD . /srv
 RUN chown -R sentry: /srv
 RUN chmod 755 /srv/run.sh
