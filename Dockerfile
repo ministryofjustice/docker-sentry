@@ -3,7 +3,7 @@ FROM python:2.7-onbuild
 ENV APP_HOME=/srv/
 
 ENV DEBIAN_FRONTEND noninteractive
-RUN apt-get update && apt-get install -y supervisor
+RUN apt-get update && apt-get upgrade -y && apt-get install -y supervisor
 RUN adduser --disabled-password --gecos "" sentry
 
 # Install latest python

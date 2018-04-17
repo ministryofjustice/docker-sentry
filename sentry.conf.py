@@ -1,24 +1,79 @@
 # This file is just Python, with a touch of Django which means
 # you can inherit and tweak settings to your hearts content.
-from sentry.conf.server import *
 
+# For Docker, the following environment variables are supported:
+#  SENTRY_POSTGRES_HOST
+#  SENTRY_POSTGRES_PORT
+#  SENTRY_DB_NAME
+#  SENTRY_DB_USER
+#  SENTRY_DB_PASSWORD
+#  SENTRY_RABBITMQ_HOST
+#  SENTRY_RABBITMQ_USERNAME
+#  SENTRY_RABBITMQ_PASSWORD
+#  SENTRY_RABBITMQ_VHOST
+#  SENTRY_REDIS_HOST
+#  SENTRY_REDIS_PASSWORD
+#  SENTRY_REDIS_PORT
+#  SENTRY_REDIS_DB
+#  SENTRY_MEMCACHED_HOST
+#  SENTRY_MEMCACHED_PORT
+#  SENTRY_FILESTORE_DIR
+#  SENTRY_SERVER_EMAIL
+#  SENTRY_EMAIL_HOST
+#  SENTRY_EMAIL_PORT
+#  SENTRY_EMAIL_USER
+#  SENTRY_EMAIL_PASSWORD
+#  SENTRY_EMAIL_USE_TLS
+#  SENTRY_ENABLE_EMAIL_REPLIES
+#  SENTRY_SMTP_HOSTNAME
+#  SENTRY_MAILGUN_API_KEY
+#  SENTRY_SINGLE_ORGANIZATION
+#  SENTRY_SECRET_KEY
+#  GITHUB_APP_ID
+#  GITHUB_API_SECRET
+#  BITBUCKET_CONSUMER_KEY
+#  BITBUCKET_CONSUMER_SECRET
+from sentry.conf.server import *  # NOQA
+
+import os
 import os.path
 
 CONF_ROOT = os.path.dirname(__file__)
-env = os.environ.get
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'sentry.db.postgres',
-        'NAME': os.environ.get('DB_USERNAME'),
-        'USER': os.environ.get('DB_USERNAME'),
-        'PASSWORD': os.environ.get('DB_PASSWORD'),
-        'HOST': os.environ.get('DB_HOST'),
-        'PORT': os.environ.get('DB_PORT'),
-        'AUTOCOMMIT': True,
-        'ATOMIC_REQUESTS': False,
+postgres = env('SENTRY_POSTGRES_HOST') or (env('POSTGRES_PORT_5432_TCP_ADDR') and 'postgres')
+if postgres:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'sentry.db.postgres',
+            'NAME': (
+                env('SENTRY_DB_NAME')
+                or env('POSTGRES_ENV_POSTGRES_USER')
+                or env('DB_USERNAME')
+                or 'postgres'
+            ),
+            'USER': (
+                env('SENTRY_DB_USER')
+                or env('POSTGRES_ENV_POSTGRES_USER')
+                or env('DB_USERNAME')
+                or 'postgres'
+            ),
+            'PASSWORD': (
+                env('SENTRY_DB_PASSWORD')
+                or env('POSTGRES_ENV_POSTGRES_PASSWORD')
+                or env('DB_PASSWORD')
+                or ''
+            ),
+            'HOST': env('DB_HOST'),
+            'PORT': (
+                env('SENTRY_POSTGRES_PORT')
+                or env('DB_PORT')
+                or ''
+            ),
+            'OPTIONS': {
+                'autocommit': True,
+            },
+        },
     }
-}
 
 # You should not change this setting after your database has been created
 # unless you have altered all schemas first
@@ -33,12 +88,7 @@ SENTRY_USE_BIG_INTS = True
 
 # Instruct Sentry that this install intends to be run by a single organization
 # and thus various UI optimizations should be enabled.
-SENTRY_SINGLE_ORGANIZATION = True
-DEBUG = False
-
-# Disable anonymous user registration
-SENTRY_FEATURES['auth:register'] = False
-
+SENTRY_SINGLE_ORGANIZATION = env('SENTRY_SINGLE_ORGANIZATION', True)
 
 #########
 # Redis #
@@ -47,10 +97,13 @@ SENTRY_FEATURES['auth:register'] = False
 # Generic Redis configuration used as defaults for various things including:
 # Buffers, Quotas, TSDB
 
-redis = env('REDIS_HOST')
-redis_password = env('REDIS_PASSWORD') or ''
-redis_port = env('REDIS_PORT') or '6379'
-redis_db = env('REDIS_DB') or '0'
+redis = env('SENTRY_REDIS_HOST') or env('REDIS_HOST') or (env('REDIS_PORT_6379_TCP_ADDR') and 'redis')
+if not redis:
+    raise Exception('Error: REDIS_PORT_6379_TCP_ADDR (or SENTRY_REDIS_HOST or REDIS_HOST ) is undefined, did you forget to `--link` a redis container?')
+
+redis_password = env('SENTRY_REDIS_PASSWORD') or env('REDIS_PASSWORD') or ''
+redis_port = env('SENTRY_REDIS_PORT') or env('REDIS_PORT') or '6379'
+redis_db = env('SENTRY_REDIS_DB') or env('REDIS_DB') or '0'
 
 SENTRY_OPTIONS.update({
     'redis.clusters': {
@@ -67,7 +120,6 @@ SENTRY_OPTIONS.update({
     },
 })
 
-
 #########
 # Cache #
 #########
@@ -75,17 +127,19 @@ SENTRY_OPTIONS.update({
 # Sentry currently utilizes two separate mechanisms. While CACHES is not a
 # requirement, it will optimize several high throughput patterns.
 
-# If you wish to use memcached, install the dependencies and adjust the config
-# as shown:
-#
-#   pip install python-memcached
-#
-# CACHES = {
-#     'default': {
-#         'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
-#         'LOCATION': ['127.0.0.1:11211'],
-#     }
-# }
+memcached = env('SENTRY_MEMCACHED_HOST') or (env('MEMCACHED_PORT_11211_TCP_ADDR') and 'memcached')
+if memcached:
+    memcached_port = (
+        env('SENTRY_MEMCACHED_PORT')
+        or '11211'
+    )
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+            'LOCATION': [memcached + ':' + memcached_port],
+            'TIMEOUT': 3600,
+        }
+    }
 
 # A primary cache is required for things such as processing events
 SENTRY_CACHE = 'sentry.cache.redis.RedisCache'
@@ -94,11 +148,31 @@ SENTRY_CACHE = 'sentry.cache.redis.RedisCache'
 # Queue #
 #########
 
-# See https://docs.sentry.io/on-premise/server/queue/ for more
+# See https://docs.getsentry.com/on-premise/server/queue/ for more
 # information on configuring your queue broker and workers. Sentry relies
 # on a Python framework called Celery to manage queues.
 
-BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379')
+rabbitmq = env('SENTRY_RABBITMQ_HOST') or (env('RABBITMQ_PORT_5672_TCP_ADDR') and 'rabbitmq')
+
+if rabbitmq:
+    BROKER_URL = (
+        'amqp://' + (
+            env('SENTRY_RABBITMQ_USERNAME')
+            or env('RABBITMQ_ENV_RABBITMQ_DEFAULT_USER')
+            or 'guest'
+        ) + ':' + (
+            env('SENTRY_RABBITMQ_PASSWORD')
+            or env('RABBITMQ_ENV_RABBITMQ_DEFAULT_PASS')
+            or 'guest'
+        ) + '@' + rabbitmq + '/' + (
+            env('SENTRY_RABBITMQ_VHOST')
+            or env('RABBITMQ_ENV_RABBITMQ_DEFAULT_VHOST')
+            or '/'
+        )
+    )
+else:
+    BROKER_URL = 'redis://:' + redis_password + '@' + redis + ':' + redis_port + '/' + redis_db
+
 
 ###############
 # Rate Limits #
@@ -150,12 +224,12 @@ SENTRY_DIGESTS = 'sentry.digests.backends.redis.RedisBackend'
 # File storage #
 ################
 
-# Any Django storage backend is compatible with Sentry. For more solutions see
-# the django-storages package: https://django-storages.readthedocs.io/en/latest/
+# Uploaded media uses these `filestore` settings. The available
+# backends are either `filesystem` or `s3`.
 
-SENTRY_FILESTORE = 'django.core.files.storage.FileSystemStorage'
-SENTRY_FILESTORE_OPTIONS = {
-    'location': '/tmp/sentry-files',
+SENTRY_OPTIONS['filestore.backend'] = 'filesystem'
+SENTRY_OPTIONS['filestore.options'] = {
+    'location': env('SENTRY_FILESTORE_DIR'),
 }
 
 ##############
@@ -163,45 +237,74 @@ SENTRY_FILESTORE_OPTIONS = {
 ##############
 
 # If you're using a reverse SSL proxy, you should enable the X-Forwarded-Proto
-# header and uncomment the following settings
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-# SESSION_COOKIE_SECURE = True
-# CSRF_COOKIE_SECURE = True
+# header and set `SENTRY_USE_SSL=1`
 
-# If you're not hosting at the root of your web server,
-# you need to uncomment and set it to the path where Sentry is hosted.
-# FORCE_SCRIPT_NAME = '/sentry'
+if env('SENTRY_USE_SSL', False):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SOCIAL_AUTH_REDIRECT_IS_HTTPS = True
 
 SENTRY_WEB_HOST = '0.0.0.0'
 SENTRY_WEB_PORT = 9000
 SENTRY_WEB_OPTIONS = {
     # 'workers': 3,  # the number of web workers
-    # 'protocol': 'uwsgi',  # Enable uwsgi protocol instead of http
 }
-
-# GRAVATAR URL
-SENTRY_GRAVATAR_BASE_URL = 'https://secure.gravatar.com'
 
 ###############
 # Mail Server #
 ###############
 
 
-email = env('EMAIL_HOST')
+email = env('SENTRY_EMAIL_HOST') or (env('SMTP_PORT_25_TCP_ADDR') and 'smtp')
 if email:
     SENTRY_OPTIONS['mail.backend'] = 'smtp'
     SENTRY_OPTIONS['mail.host'] = email
-    SENTRY_OPTIONS['mail.password'] = env('EMAIL_HOST_PASSWORD') or ''
-    SENTRY_OPTIONS['mail.username'] = env('EMAIL_HOST_USER') or ''
-    SENTRY_OPTIONS['mail.port'] = int(env('EMAIL_PORT'))
-    SENTRY_OPTIONS['mail.use-tls'] = True
-    # The email address to send on behalf of
-    SENTRY_OPTIONS['mail.from'] = env('SERVER_EMAIL')
+    SENTRY_OPTIONS['mail.password'] = env('SENTRY_EMAIL_PASSWORD') or env('EMAIL_HOST_PASSWORD') or ''
+    SENTRY_OPTIONS['mail.username'] = env('SENTRY_EMAIL_USER') or env('EMAIL_HOST_USER') or ''
+    SENTRY_OPTIONS['mail.port'] = int(env('SENTRY_EMAIL_PORT') or env('EMAIL_PORT') or 25)
+    SENTRY_OPTIONS['mail.use-tls'] = env('SENTRY_EMAIL_USE_TLS', True)
 else:
     SENTRY_OPTIONS['mail.backend'] = 'dummy'
 
+# The email address to send on behalf of
+SENTRY_OPTIONS['mail.from'] = env('SENTRY_SERVER_EMAIL') or 'root@localhost'
+
+# If you're using mailgun for inbound mail, set your API key and configure a
+# route to forward to /api/hooks/mailgun/inbound/
+SENTRY_OPTIONS['mail.mailgun-api-key'] = env('SENTRY_MAILGUN_API_KEY') or ''
+
+# If you specify a MAILGUN_API_KEY, you definitely want EMAIL_REPLIES
+if SENTRY_OPTIONS['mail.mailgun-api-key']:
+    SENTRY_OPTIONS['mail.enable-replies'] = True
+else:
+    SENTRY_OPTIONS['mail.enable-replies'] = env('SENTRY_ENABLE_EMAIL_REPLIES', False)
+
+if SENTRY_OPTIONS['mail.enable-replies']:
+    SENTRY_OPTIONS['mail.reply-hostname'] = env('SENTRY_SMTP_HOSTNAME') or ''
 
 # If this value ever becomes compromised, it's important to regenerate your
 # SENTRY_SECRET_KEY. Changing this value will result in all current sessions
 # being invalidated.
-SENTRY_OPTIONS['system.secret-key'] = env('SECRET_KEY')
+secret_key = env('SENTRY_SECRET_KEY') or env('SECRET_KEY')
+if not secret_key:
+    raise Exception('Error: SENTRY_SECRET_KEY is undefined, run `generate-secret-key` and set to -e SENTRY_SECRET_KEY')
+
+if 'SENTRY_RUNNING_UWSGI' not in os.environ and len(secret_key) < 32:
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+    print('!!                    CAUTION                       !!')
+    print('!! Your SENTRY_SECRET_KEY is potentially insecure.  !!')
+    print('!!    We recommend at least 32 characters long.     !!')
+    print('!!     Regenerate with `generate-secret-key`.       !!')
+    print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+
+SENTRY_OPTIONS['system.secret-key'] = secret_key
+
+if 'GITHUB_APP_ID' in os.environ:
+    GITHUB_EXTENDED_PERMISSIONS = ['repo']
+    GITHUB_APP_ID = env('GITHUB_APP_ID')
+    GITHUB_API_SECRET = env('GITHUB_API_SECRET')
+
+if 'BITBUCKET_CONSUMER_KEY' in os.environ:
+    BITBUCKET_CONSUMER_KEY = env('BITBUCKET_CONSUMER_KEY')
+    BITBUCKET_CONSUMER_SECRET = env('BITBUCKET_CONSUMER_SECRET')
